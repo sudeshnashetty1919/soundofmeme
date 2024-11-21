@@ -96,9 +96,15 @@ def main():
     - Processes the first `n` mentions based on the unread notification count.
     """
     # Initialize Chrome WebDriver
+    # Set up Chrome options for headless mode and required flags
+    options = Options()
+    options.add_argument("--headless")  # Run Chrome in headless mode
+    options.add_argument("--no-sandbox")  # Disable sandboxing (needed for Docker)
+    options.add_argument("--disable-dev-shm-usage")  # Disable /dev/shm usage
+    options.add_argument("--remote-debugging-port=9222")  # Allow debugging on a given port
     logging.info("Initializing WebDriver.")
     service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service)
+    driver = webdriver.Chrome(service=service, options=options)
     driver.maximize_window()
     driver.get('https://twitter.com/login')
     login_page = Login_Page(driver)
