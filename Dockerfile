@@ -1,6 +1,8 @@
 # Base image
 FROM python:3.9
 
+pip install --upgrade webdriver-manager
+
 # Set working directory
 WORKDIR /app
 
@@ -30,6 +32,9 @@ RUN apt-get update && apt-get install -y \
     dpkg -i google-chrome-stable_current_amd64.deb || apt-get -fy install && \
     rm google-chrome-stable_current_amd64.deb && \
     google-chrome --version  # This will check and print the Chrome version during build
+
+RUN apt-get update && apt-get install -y google-chrome-stable
+
 
 # Install ChromeDriver
 RUN CHROMEDRIVER_VERSION=$(wget -qO- https://chromedriver.storage.googleapis.com/LATEST_RELEASE) && \
