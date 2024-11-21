@@ -33,7 +33,8 @@ RUN apt-get update && apt-get install -y \
     rm google-chrome-stable_current_amd64.deb && \
     google-chrome --version  # This will check and print the Chrome version during build
 
-RUN apt-get update && apt-get install -y google-chrome-stable
+RUN apt-get update && apt-get install -y chromium-chromedriver
+
 
 
 # Install ChromeDriver
