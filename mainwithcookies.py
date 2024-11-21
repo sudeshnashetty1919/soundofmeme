@@ -1,7 +1,6 @@
-import os
 import time
+import os
 import json
-import pickle
 import logging
 from datetime import datetime
 from selenium import webdriver
@@ -13,10 +12,13 @@ from webdriver_manager.chrome import ChromeDriverManager
 from pages.loginfortwitter import Login_Page
 from pages.GenerateSongs import SoundOfMeme
 import config
+import pickle
+
+os.environ["PATH"] += os.pathsep + "/usr/local/bin"
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler("script.log"),
@@ -24,165 +26,178 @@ logging.basicConfig(
     ]
 )
 
-class CookieManager:
-    """Handles saving and loading of cookies."""
-    
-    @staticmethod
-    def save_cookies(driver):
-        with open("cookie.pkl", 'wb') as filehandler:
-            pickle.dump(driver.get_cookies(), filehandler)
+def save_cookie(driver):
+    """ Save cookies to a file. """
+    with open("cookie.pkl", 'wb') as filehandler:
+        pickle.dump(driver.get_cookies(), filehandler)
         logging.info("Cookies saved successfully.")
 
-    @staticmethod
-    def load_cookies(driver):
-        if os.path.exists("cookie.pkl"):
-            with open("cookie.pkl", 'rb') as cookiesfile:
-                cookies = pickle.load(cookiesfile)
-                for cookie in cookies:
-                    driver.add_cookie(cookie)
-            logging.info("Cookies loaded successfully.")
-            return True
-        logging.warning("No cookies file found.")
-        return False
+def load_cookie(driver):
+    """ Load cookies from a file. """
+    if os.path.exists("cookie.pkl"):
+        with open("cookie.pkl", 'rb') as cookiesfile:
+            cookies = pickle.load(cookiesfile)
+            for cookie in cookies:
+                driver.add_cookie(cookie)
+        logging.info("Cookies loaded successfully.")
+        return True
+    logging.warning("No cookies found.")
+    return False
 
-class ReplyLogManager:
-    """Handles saving and loading of reply logs."""
-    
-    @staticmethod
-    def load_log():
-        if os.path.exists("reply_log.json"):
-            with open("reply_log.json", "r") as file:
-                logging.info("Reply log loaded.")
-                return json.load(file)
-        logging.info("No reply log found. Starting fresh.")
-        return {}
+def load_reply_log():
+    """Load the reply log from a file."""
+    if os.path.exists("reply_log.json"):
+        with open("reply_log.json", "r") as file:
+            logging.info("Reply log loaded.")
+            return json.load(file)
+    logging.info("No reply log found. Starting fresh.")
+    return {}
 
-    @staticmethod
-    def save_log(reply_log):
-        with open("reply_log.json", "w") as file:
-            json.dump(reply_log, file, indent=4)
+def save_reply_log(reply_log):
+    """Save the reply log to a file."""
+    with open("reply_log.json", "w") as file:
+        json.dump(reply_log, file, indent=4)
         logging.info("Reply log saved.")
 
-class TwitterBot:
-    """Handles login and interactions with Twitter."""
-    
-    def __init__(self, driver):
-        self.driver = driver
-        self.login_page = Login_Page(driver)
+def reply_to_mention(driver, song_url, tagger_name):
+    """Reply to a specific mention with the generated song URL."""
+    try:
+        reply_button_xpath = f"//span[contains(text(),'{tagger_name}')]//ancestor::div[contains(@class,'r-kzbkwu')]"
+        reply_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, reply_button_xpath))
+        )
+        reply_button.click()
 
-    def login(self):
-        """Attempts to log in using cookies or manual credentials."""
-        if CookieManager.load_cookies(self.driver):
-            logging.info("Cookies loaded. Refreshing page to maintain session...")
-            time.sleep(5)
-            self.driver.refresh()
-        else:
-            logging.info("Cookies not found or invalid. Logging in manually.")
-            self.manual_login()
-            CookieManager.save_cookies(self.driver)
+        # Wait for the reply input field
+        reply_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, "//div[@data-testid='tweetTextarea_0']"))
+        )
+        reply_input.send_keys(song_url)  # Enter the song URL
 
-    def manual_login(self):
-        """Performs manual login with credentials."""
-        self.login_page.enter_text(self.login_page.email_input, config.TWITTER_EMAIL)
-        self.login_page.click_element(self.login_page.next_button)
+        # Wait for the post reply button to be clickable
+        post_reply_button = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, "//button[@data-testid='tweetButtonInline']"))
+        )
+        post_reply_button.click()
 
-        # Handle username/phone input if prompted
-        if self.login_page.is_phone_or_user_name_asked():
-            self.login_page.enter_phone_or_user_name(config.PHONE_OR_USERNAME)
-            self.login_page.click_element(self.login_page.next_button)
+        logging.info(f"Successfully replied to the mention of {tagger_name} with URL: {song_url}")
 
-        self.login_page.enter_text(self.login_page.password_input, config.TWITTER_PASSWORD)
-        self.login_page.click_element(self.login_page.login_button)
+        # Log the reply details
+        return {"song_url": song_url, "date_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-        # Wait for login to complete
-        WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.XPATH, "//button[@aria-label='Account menu']")))
-        logging.info("Logged in successfully.")
-
-    def get_mentions(self, unread_count):
-        """Fetches mentions from unread notifications."""
-        return self.login_page.get_mentions(unread_count)
-
-    def reply_to_mention(self, song_url, tagger_name):
-        """Replies to a specific mention with the generated song URL."""
-        try:
-            reply_button_xpath = f"//span[contains(text(),'{tagger_name}')]//ancestor::div[contains(@class,'r-kzbkwu')]"
-            reply_button = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, reply_button_xpath))
-            )
-            reply_button.click()
-
-            reply_input = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.XPATH, "//div[@data-testid='tweetTextarea_0']"))
-            )
-            reply_input.send_keys(song_url)
-
-            post_reply_button = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[@data-testid='tweetButtonInline']"))
-            )
-            post_reply_button.click()
-
-            logging.info(f"Successfully replied to the mention by {tagger_name} with URL: {song_url}")
-            return {"song_url": song_url, "date_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-
-        except Exception as e:
-            logging.error(f"Error replying to mention for {tagger_name}: {e}")
-            return None
-
-class SoundOfMemeHandler:
-    """Handles interactions with SoundOfMeme API."""
-    
-    @staticmethod
-    def process_song(file_path, tagger_name):
-        sound_of_meme = SoundOfMeme()
-        token = sound_of_meme.login("Sudeshna Shetty", "sudeshnashetty2211@gmail.com", "https://example.com/profile.jpg")
-
-        if token:
-            uploaded_data = sound_of_meme.upload_image(file_path)
-            if uploaded_data and "songs" in uploaded_data:
-                uploaded_ids = [int(id_str) for id_str in uploaded_data["songs"].split(",")]
-                time.sleep(240)  # Wait for processing
-                slugs = sound_of_meme.fetch_slugs_for_uploaded_ids(uploaded_ids)
-                if slugs:
-                    return slugs[0]
-        logging.error(f"Failed to process song for {tagger_name}.")
+    except Exception as e:
+        logging.error(f"Error replying to the mention for {tagger_name}: {e}")
         return None
 
 def main():
-    # Initialize WebDriver
+    """
+    Main function:
+    - Logs in to Twitter.
+    - Processes the first `n` mentions based on the unread notification count.
+    """
+    # Initialize Chrome WebDriver
     logging.info("Initializing WebDriver.")
     service = Service(ChromeDriverManager().install())
-    service = Service("/root/.wdm/drivers/chromedriver/linux64/131.0.6778.85/chromedriver")
     driver = webdriver.Chrome(service=service)
     driver.maximize_window()
+    driver.get('https://twitter.com/login')
+    login_page = Login_Page(driver)
 
-    twitter_bot = TwitterBot(driver)
-    twitter_bot.login()
+    # Attempt to load cookies if they exist
+    if load_cookie(driver):
+        logging.info("Cookies loaded. Refreshing page to maintain session...")
+        time.sleep(10)
+        driver.refresh()
+    else:
+        logging.info("Cookies not valid or not found, logging in manually.")
+        login_page.enter_text(login_page.email_input, config.TWITTER_EMAIL)
+        login_page.click_element(login_page.next_button)
 
-    unread_count = twitter_bot.login_page.get_unread_notifications()
+        # Handle phone/username input if asked
+        if login_page.is_phone_or_user_name_asked():
+            login_page.enter_phone_or_user_name(config.PHONE_OR_USERNAME)
+            login_page.click_element(login_page.next_button)
+        
+        login_page.enter_text(login_page.password_input, config.TWITTER_PASSWORD)
+        login_page.click_element(login_page.login_button)
+
+        # Wait for the login to complete
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.XPATH, "//button[@aria-label='Account menu']")))
+        save_cookie(driver)
+
+    logging.info("Logged in successfully.")
+    driver.get("https://twitter.com/home")
+
+    # Fetch unread notification count
+    unread_count = login_page.get_unread_notifications()
     logging.info(f"Unread mentions to process: {unread_count}")
 
-    reply_log = ReplyLogManager.load_log()
+    # Load reply log
+    reply_log = load_reply_log()
+
     mentions_processed = 0
-
     while mentions_processed < unread_count:
-        mentions = twitter_bot.get_mentions(unread_count)
-        for mention in mentions:
-            tagger_name = mention["tagger_name"]
-            file_path = twitter_bot.login_page.take_screenshot(tagger_name)
-            if not file_path:
-                continue
+        logging.info(f"Processing mentions ({mentions_processed + 1}/{unread_count})")
+        mentions = login_page.get_mentions(unread_count)
 
-            song_url = SoundOfMemeHandler.process_song(file_path, tagger_name)
-            if song_url:
-                reply_details = twitter_bot.reply_to_mention(song_url, tagger_name)
-                if reply_details:
-                    reply_log.setdefault(tagger_name, []).append(reply_details)
-                    ReplyLogManager.save_log(reply_log)
+        if not mentions:
+            logging.warning("No mentions found. Retrying after a delay.")
+            time.sleep(10)
+            unread_count = login_page.get_unread_notifications()
+            continue
+
+        for mention in mentions:
+            if mentions_processed >= unread_count:
+                break
+
+            try:
+                tagger_name = mention["tagger_name"]
+                logging.debug(f"Processing mention by {tagger_name}")
+
+                clicked_name = login_page.click_on_tagger_name(tagger_name)
+                if clicked_name:
+                    file_path = login_page.take_screenshot(tagger_name)
+                    login_page.click_on_back()
+
+                    if not file_path:
+                        logging.warning(f"Screenshot not saved for {tagger_name}")
+                        continue
+
+                    sound_of_meme = SoundOfMeme()
+                    token = sound_of_meme.login("Sudeshna Shetty", "sudeshnashetty2211@gmail.com", "https://example.com/profile.jpg")
+
+                    if token:
+                        uploaded_data = sound_of_meme.upload_image(file_path)
+                        if uploaded_data and "songs" in uploaded_data:
+                            uploaded_ids = [int(id_str) for id_str in uploaded_data["songs"].split(",")]
+                            logging.debug(f"Uploaded IDs: {uploaded_ids}")
+                            time.sleep(240)
+                            slugs = sound_of_meme.fetch_slugs_for_uploaded_ids(uploaded_ids)
+
+                            if slugs:
+                                song_url = slugs[0]
+                                reply_details = reply_to_mention(driver, song_url, tagger_name)
+                                if reply_details:
+                                    if tagger_name not in reply_log:
+                                        reply_log[tagger_name] = []
+                                    reply_log[tagger_name].append(reply_details)
+                                    save_reply_log(reply_log)
+
+                        else:
+                            logging.warning(f"Upload failed for {tagger_name}")
+                    else:
+                        logging.error("Login to SoundOfMeme failed.")
+            except Exception as e:
+                logging.error(f"Error processing mention for {tagger_name}: {e}")
 
             mentions_processed += 1
-        time.sleep(10)  # Avoid spamming requests
 
-    logging.info("Processed all mentions. Exiting.")
+        if mentions_processed < unread_count:
+            logging.info("Waiting before checking for new mentions...")
+            time.sleep(10)
+
+    logging.info("Processed all unread mentions. Exiting.")
+    save_cookie(driver)
     driver.quit()
 
 if __name__ == "__main__":
