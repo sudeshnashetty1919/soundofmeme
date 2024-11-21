@@ -1,13 +1,14 @@
 # Base image
 FROM python:3.9
 
+# Upgrade pip and install Python dependencies
 RUN pip install --upgrade pip && \
     pip install webdriver-manager
 
 # Set working directory
 WORKDIR /app
 
-# Install dependencies and Chrome
+# Install system dependencies and Chrome
 RUN apt-get update && apt-get install -y \
     wget \
     unzip \
@@ -32,11 +33,7 @@ RUN apt-get update && apt-get install -y \
     wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && \
     dpkg -i google-chrome-stable_current_amd64.deb || apt-get -fy install && \
     rm google-chrome-stable_current_amd64.deb && \
-    google-chrome --version  # This will check and print the Chrome version during build
-
-RUN apt-get update && apt-get install -y chromium-chromedriver
-
-
+    google-chrome --version  # Verify Chrome installation
 
 # Install ChromeDriver
 RUN CHROMEDRIVER_VERSION=$(wget -qO- https://chromedriver.storage.googleapis.com/LATEST_RELEASE) && \
@@ -44,13 +41,13 @@ RUN CHROMEDRIVER_VERSION=$(wget -qO- https://chromedriver.storage.googleapis.com
     unzip chromedriver_linux64.zip -d /usr/local/bin && \
     rm chromedriver_linux64.zip
 
-# Set PATH for ChromeDriver
+# Set ChromeDriver in PATH
 ENV PATH="/usr/local/bin:$PATH"
 
 # Copy project files to the container
 COPY . .
 
-# Install Python dependencies
+# Install Python dependencies from requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Run the Python script
