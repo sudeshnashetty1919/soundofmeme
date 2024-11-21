@@ -1,7 +1,8 @@
 # Base image
 FROM python:3.9
 
-pip install --upgrade webdriver-manager
+RUN pip install --upgrade pip && \
+    pip install webdriver-manager
 
 # Set working directory
 WORKDIR /app
