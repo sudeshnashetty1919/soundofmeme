@@ -202,8 +202,8 @@ class Login_Page(BasePage):
         try:
             # Wait for the element containing the unread notifications to be visible
             unread_notifications_element = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located(self.notifications_number)
-            )
+                    EC.presence_of_element_located((By.XPATH, "//div[contains(@aria-label,'unread items')]//span"))
+                    )
             
             # If the element is found, try to fetch the unread notification count
             unread_text = unread_notifications_element.text.strip()
