@@ -35,14 +35,18 @@ RUN apt-get update && apt-get install -y \
     rm google-chrome-stable_current_amd64.deb && \
     google-chrome --version  # Verify Chrome installation
 
+# Create directory for storing chromedriver and ensure permissions
+RUN mkdir -p /usr/local/bin/chromedriver && \
+    chmod -R 755 /usr/local/bin/chromedriver
+
 # Install ChromeDriver
 RUN CHROMEDRIVER_VERSION=$(wget -qO- https://chromedriver.storage.googleapis.com/LATEST_RELEASE) && \
     wget -q https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip && \
-    unzip chromedriver_linux64.zip -d /usr/local/bin && \
+    unzip chromedriver_linux64.zip -d /usr/local/bin/chromedriver && \
     rm chromedriver_linux64.zip
 
 # Set ChromeDriver in PATH
-ENV PATH="/usr/local/bin:$PATH"
+ENV PATH="/usr/local/bin/chromedriver:$PATH"
 
 # Copy project files to the container
 COPY . .
