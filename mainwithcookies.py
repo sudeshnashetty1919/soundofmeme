@@ -151,6 +151,7 @@ def main():
     # Initialize WebDriver
     logging.info("Initializing WebDriver.")
     service = Service(ChromeDriverManager().install())
+    service = Service("/root/.wdm/drivers/chromedriver/linux64/131.0.6778.85/chromedriver")
     driver = webdriver.Chrome(service=service)
     driver.maximize_window()
 
