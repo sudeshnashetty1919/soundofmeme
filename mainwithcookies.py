@@ -49,7 +49,7 @@ def reply_to_mention(driver, song_url, tagger_name):
     """Reply to the second consecutive mention from a specific account with the generated song URL."""
     try:
         # XPath to locate the second consecutive mention from the same account
-        reply_button_xpath = f"//span[contains(text(),'{tagger_name}')]//ancestor::div[contains(@class,'r-kzbkwu')][position() = 2]"
+        reply_button_xpath = f"//span[contains(text(),'{tagger_name}')]//ancestor::div[contains(@class,'r-kzbkwu')]"
         
         # Wait for the reply button of the second mention to be clickable
         reply_button = WebDriverWait(driver, 10).until(
@@ -78,13 +78,68 @@ def reply_to_mention(driver, song_url, tagger_name):
         return None
 
 
+def process_mentions(driver, login_page, sound_of_meme, reply_log):
+    """Process unread mentions and reply."""
+    unread_count = login_page.get_unread_notifications()
+    print(f"Unread mentions to process: {unread_count}")
+
+    if unread_count == 0:
+        return
+
+    login_page.click_on_notifications()
+    time.sleep(5)
+    login_page.click_on_mentions()
+    time.sleep(10)
+    login_page.click_on_notifications()
+    time.sleep(5)
+    login_page.click_on_mentions()
+    time.sleep(10)
+    driver.refresh()
+
+    mentions_processed = 0
+
+    while mentions_processed < unread_count:
+        mentions = login_page.get_mentions(unread_count)
+        if not mentions:
+            break
+
+        for mention in mentions:
+            if mentions_processed >= unread_count:
+                break
+
+            tagger_name = mention["tagger_name"]
+            print(f"Processing mention by {tagger_name}")
+
+            clicked_name = login_page.click_on_tagger_name(tagger_name)
+            if clicked_name:
+                file_path = login_page.take_screenshot(tagger_name)
+                login_page.click_on_back()
+
+                if file_path:
+                    token = sound_of_meme.login(
+                        name="Sudeshna Shetty",
+                        email="sudeshnashetty2211@gmail.com",
+                        picture_url="https://lh3.googleusercontent.com/a/ACg8ocLA7Y24F3ZGv4-l_gpYhumZ2MgrvQKlqwHT3D-AG7wadKA3Lg=s96-c",
+                    )
+
+                    if token:
+                        uploaded_data = sound_of_meme.upload_image(file_path)
+                        if uploaded_data and "songs" in uploaded_data:
+                            uploaded_ids = [int(id_str) for id_str in uploaded_data["songs"].split(",")]
+                            time.sleep(240)
+                            slugs = sound_of_meme.fetch_slugs_for_uploaded_ids(uploaded_ids)
+
+                            if slugs:
+                                song_url = slugs[0]
+                                reply_details = reply_to_mention(driver, song_url, tagger_name)
+                                if reply_details:
+                                    reply_log.setdefault(tagger_name, []).append(reply_details)
+                                    save_reply_log(reply_log)
+            mentions_processed += 1
+
+
 def main():
-    """
-    Main function:
-    - Logs in to Twitter.
-    - Processes the first n mentions based on the unread notification count.
-    """
-    # Initialize Chrome WebDriver
+    """Main function to continuously process Twitter mentions."""
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service)
     driver.maximize_window()
@@ -96,8 +151,7 @@ def main():
         time.sleep(10)
         driver.refresh()
     else:
-        print("Cookies not valid or not found, logging in manually.")
-
+        print("Cookies not found, logging in manually.")
         login_page.enter_text(login_page.email_input, config.TWITTER_EMAIL)
         login_page.click_element(login_page.next_button)
 
@@ -114,105 +168,21 @@ def main():
         save_cookie(driver)
 
     print("Logged in successfully.")
-
-    driver.get("https://twitter.com/home")
-    print("Logged in to the homepage.")
-    time.sleep(30)
-
-    unread_count = login_page.get_unread_notifications()
-    print(f"Unread mentions to process: {unread_count}")
-
-    login_page.click_on_notifications()
-    time.sleep(5)
-    login_page.click_on_mentions()
-    time.sleep(10)
-    driver.refresh()
-    login_page.click_on_notifications()
-    time.sleep(5)
-    login_page.click_on_mentions()
-
     reply_log = load_reply_log()
-    print("Reply log loaded.")
+    sound_of_meme = SoundOfMeme()
 
-    mentions_processed = 0
-
-    while mentions_processed < unread_count:
-        print(f"Checking for new mentions... ({mentions_processed + 1}/{unread_count})")
-        mentions = login_page.get_mentions(unread_count)
-
-        if not mentions:
-            print("No mentions found. Retrying after a delay.")
-            time.sleep(10)
-            unread_count = login_page.get_unread_notifications()
-            print("from if in while loop")
-            continue
-
-        for mention in mentions:
-            if mentions_processed >= unread_count:
-                break
-
-            try:
-                tagger_name = mention["tagger_name"]
-                print(f"Processing mention by {tagger_name}")
-
-                clicked_name = login_page.click_on_tagger_name(tagger_name)
-
-                if clicked_name:
-                    print(f"Clicked on @{clicked_name}'s profile.")
-                    file_path = login_page.take_screenshot(tagger_name)
-                    login_page.click_on_back()
-
-                    if not file_path:
-                        print(f"Error: Screenshot not saved for {tagger_name}")
-                        continue
-
-                    print(f"Screenshot saved at: {file_path}")
-
-                    sound_of_meme = SoundOfMeme()
-                    token = sound_of_meme.login(
-                        name="Sudeshna Shetty",
-                        email="sudeshnashetty2211@gmail.com",
-                        picture_url="https://lh3.googleusercontent.com/a/ACg8ocLA7Y24F3ZGv4-l_gpYhumZ2MgrvQKlqwHT3D-AG7wadKA3Lg=s96-c",
-                    )
-
-                    if token:
-                        uploaded_data = sound_of_meme.upload_image(file_path)
-                        if uploaded_data and "songs" in uploaded_data:
-                            uploaded_ids = [int(id_str) for id_str in uploaded_data["songs"].split(",")]
-                            print(f"Uploaded IDs: {uploaded_ids}")
-
-                            time.sleep(240)
-                            slugs = sound_of_meme.fetch_slugs_for_uploaded_ids(uploaded_ids)
-
-                            if slugs:
-                                song_url = slugs[0]
-                                print(f"Generated song URL: {song_url}")
-
-                                reply_details = reply_to_mention(driver, song_url, tagger_name)
-                                if reply_details:
-                                    reply_log.setdefault(tagger_name, []).append(reply_details)
-                                    save_reply_log(reply_log)
-                            else:
-                                print(f"No song URLs found for {tagger_name}")
-                        else:
-                            print(f"Upload failed for {tagger_name}")
-                    else:
-                        print("Login to SoundOfMeme failed.")
-                else:
-                    print(f"Could not click on or verify tagger: {tagger_name}")
-
-            except Exception as e:
-                print(f"Error processing mention for {tagger_name}: {e}")
-
-            mentions_processed += 1
-
-        if mentions_processed < unread_count:
-            print("Waiting before checking for new mentions...")
-            time.sleep(10)
-
-    print("Processed all unread mentions. Exiting.")
-    save_cookie(driver)
-    driver.quit()
+    try:
+        while True:
+            print("Checking for new mentions...")
+            process_mentions(driver, login_page, sound_of_meme, reply_log)
+            driver.get("https://twitter.com/home")
+            print("Waiting 5 minutes before checking again...")
+            time.sleep(300)
+    except KeyboardInterrupt:
+        print("Stopping script.")
+    finally:
+        save_cookie(driver)
+       
 
 
 if __name__ == "__main__":
