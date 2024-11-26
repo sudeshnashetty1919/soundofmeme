@@ -134,10 +134,20 @@ def main():
 
     logging.info("Logged in successfully.")
     driver.get("https://twitter.com/home")
-
+    time.sleep(30)
+    
     # Fetch unread notification count
     unread_count = login_page.get_unread_notifications()
     logging.info(f"Unread mentions to process: {unread_count}")
+    
+    login_page.click_on_notifications()
+    time.sleep(5)
+    login_page.click_on_mentions()
+    time.sleep(10)
+    driver.refresh()
+    login_page.click_on_notifications()
+    time.sleep(5)
+    login_page.click_on_mentions()
 
     # Load reply log
     reply_log = load_reply_log()
