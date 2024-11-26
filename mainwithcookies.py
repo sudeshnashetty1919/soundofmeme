@@ -135,35 +135,22 @@ def main():
     logging.info("Logged in successfully.")
     driver.get("https://twitter.com/home")
 
-    print("Logged in to the homepage.")
-    time.sleep(30)
-
+    # Fetch unread notification count
     unread_count = login_page.get_unread_notifications()
-    print(f"Unread mentions to process: {unread_count}")
+    logging.info(f"Unread mentions to process: {unread_count}")
 
-    login_page.click_on_notifications()
-    time.sleep(5)
-    login_page.click_on_mentions()
-    time.sleep(10)
-    driver.refresh()
-    login_page.click_on_notifications()
-    time.sleep(5)
-    login_page.click_on_mentions()
-
+    # Load reply log
     reply_log = load_reply_log()
-    print("Reply log loaded.")
 
     mentions_processed = 0
-
     while mentions_processed < unread_count:
-        print(f"Checking for new mentions... ({mentions_processed + 1}/{unread_count})")
+        logging.info(f"Processing mentions ({mentions_processed + 1}/{unread_count})")
         mentions = login_page.get_mentions(unread_count)
 
         if not mentions:
-            print("No mentions found. Retrying after a delay.")
+            logging.warning("No mentions found. Retrying after a delay.")
             time.sleep(10)
             unread_count = login_page.get_unread_notifications()
-            print("from if in while loop")
             continue
 
         for mention in mentions:
@@ -172,64 +159,51 @@ def main():
 
             try:
                 tagger_name = mention["tagger_name"]
-                print(f"Processing mention by {tagger_name}")
+                logging.debug(f"Processing mention by {tagger_name}")
 
                 clicked_name = login_page.click_on_tagger_name(tagger_name)
-
                 if clicked_name:
-                    print(f"Clicked on @{clicked_name}'s profile.")
                     file_path = login_page.take_screenshot(tagger_name)
                     login_page.click_on_back()
 
                     if not file_path:
-                        print(f"Error: Screenshot not saved for {tagger_name}")
+                        logging.warning(f"Screenshot not saved for {tagger_name}")
                         continue
 
-                    print(f"Screenshot saved at: {file_path}")
-
                     sound_of_meme = SoundOfMeme()
-                    token = sound_of_meme.login(
-                        name="Sudeshna Shetty",
-                        email="sudeshnashetty2211@gmail.com",
-                        picture_url="https://lh3.googleusercontent.com/a/ACg8ocLA7Y24F3ZGv4-l_gpYhumZ2MgrvQKlqwHT3D-AG7wadKA3Lg=s96-c",
-                    )
+                    token = sound_of_meme.login("Sudeshna Shetty", "sudeshnashetty2211@gmail.com", "https://example.com/profile.jpg")
 
                     if token:
                         uploaded_data = sound_of_meme.upload_image(file_path)
                         if uploaded_data and "songs" in uploaded_data:
                             uploaded_ids = [int(id_str) for id_str in uploaded_data["songs"].split(",")]
-                            print(f"Uploaded IDs: {uploaded_ids}")
-
+                            logging.debug(f"Uploaded IDs: {uploaded_ids}")
                             time.sleep(240)
                             slugs = sound_of_meme.fetch_slugs_for_uploaded_ids(uploaded_ids)
 
                             if slugs:
                                 song_url = slugs[0]
-                                print(f"Generated song URL: {song_url}")
-
                                 reply_details = reply_to_mention(driver, song_url, tagger_name)
                                 if reply_details:
-                                    reply_log.setdefault(tagger_name, []).append(reply_details)
+                                    if tagger_name not in reply_log:
+                                        reply_log[tagger_name] = []
+                                    reply_log[tagger_name].append(reply_details)
                                     save_reply_log(reply_log)
-                            else:
-                                print(f"No song URLs found for {tagger_name}")
-                        else:
-                            print(f"Upload failed for {tagger_name}")
-                    else:
-                        print("Login to SoundOfMeme failed.")
-                else:
-                    print(f"Could not click on or verify tagger: {tagger_name}")
 
+                        else:
+                            logging.warning(f"Upload failed for {tagger_name}")
+                    else:
+                        logging.error("Login to SoundOfMeme failed.")
             except Exception as e:
-                print(f"Error processing mention for {tagger_name}: {e}")
+                logging.error(f"Error processing mention for {tagger_name}: {e}")
 
             mentions_processed += 1
 
         if mentions_processed < unread_count:
-            print("Waiting before checking for new mentions...")
+            logging.info("Waiting before checking for new mentions...")
             time.sleep(10)
 
-    print("Processed all unread mentions. Exiting.")
+    logging.info("Processed all unread mentions. Exiting.")
     save_cookie(driver)
     driver.quit()
 
